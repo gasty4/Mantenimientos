@@ -4,9 +4,11 @@ const LS_DIST = 'mant_distancias_v1';
 
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const ESTADOS = ['Pendiente','Lista','MND','Asociar'];
-const TIPOS = ['Mensual','Bimestral','Trimestral','Semestral'];
+const TIPOS = ['Mensual','Bimestral','Trimestral','Semestral','OTS','OTA'];
+const TIPOS_PUNTUALES = ['OTS','OTA']; // trabajos puntuales: no vencen ni se renuevan solos
 const INTERVALO = {Mensual:1, Bimestral:2, Trimestral:3, Semestral:6};
-const ABONO_COLOR = {Mensual:'#FFC000', Bimestral:'#C2D69B', Trimestral:'#92D050', Semestral:'#9DC3E6'};
+const ABONO_COLOR = {Mensual:'#FFC000', Bimestral:'#C2D69B', Trimestral:'#92D050', Semestral:'#B4A7D6', OTA:'#4472C4', OTS:'#9DC3E6'};
+function esPuntual(t){ return TIPOS_PUNTUALES.includes(t.tipo_abono); }
 
 let TASKS = [];
 let DIST = {};
@@ -110,11 +112,12 @@ function askFechaRealizacion(titulo, onConfirm){
 function dueYM(t){ return t.anio_vencimiento*12 + (t.mes_vencimiento-1); }
 function nowYM(){ const d = new Date(); return d.getFullYear()*12 + d.getMonth(); }
 
-function isOverdue(t){ return dueYM(t) < nowYM(); }
+function isOverdue(t){ return !esPuntual(t) && dueYM(t) < nowYM(); }
 
 function processRenewals(){
   let renewedCount = 0;
   TASKS.forEach(t=>{
+    if(esPuntual(t)) return; // OTS/OTA son puntuales: no vencen ni se renuevan solos
     const interval = INTERVALO[t.tipo_abono] || 3;
     let guard = 0;
     while(dueYM(t) < nowYM() && guard < 60){
@@ -558,9 +561,12 @@ function openTaskModal(id){
     <input type="number" id="editCantidad" min="1" value="${t.cantidad}">
     <div class="dist-sum-hint">Si cambiás la cantidad, el reparto se reinicia a Pendiente.</div>
 
-    <div class="field-label">Abono</div>
-    <div class="detail-row"><div class="k">Tipo</div><div class="v">${t.tipo_abono}</div></div>
+    <div class="field-label">Tipo de abono</div>
+    <select id="editTipoAbono">
+      ${TIPOS.map(ti=>`<option value="${ti}" ${t.tipo_abono===ti?'selected':''}>${ti}</option>`).join('')}
+    </select>
     <div class="detail-row"><div class="k">Último mantenimiento</div><div class="v">${fmtDate(t.ultimo_mantenimiento)}</div></div>
+    ${esPuntual(t) ? `<div class="dist-sum-hint">Los trabajos OTS/OTA son puntuales: no vencen ni se renuevan solos.</div>` : ''}
 
     ${histHtml ? `<div class="field-label">Historial 2026 (Excel)</div><div class="hist-strip">${histHtml}</div>` : ''}
 
@@ -610,6 +616,7 @@ function openTaskModal(id){
     const nuevaCantidad = parseInt(document.getElementById('editCantidad').value,10) || 1;
     const otrosCambios = ()=>{
       t.modelo = document.getElementById('editModelo').value.trim();
+      t.tipo_abono = document.getElementById('editTipoAbono').value;
       t.mes_vencimiento = parseInt(document.getElementById('editMes').value,10);
       const fecha = document.getElementById('editFecha').value;
       if(fecha){

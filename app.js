@@ -303,19 +303,23 @@ function taskCardHtml(t){
   </div>`;
 }
 
-function bindTaskCards(container){
+function bindTaskCards(container, onChange){
+  onChange = onChange || renderAll;
   container.querySelectorAll('.qa-btn[data-estado]').forEach(btn=>{
     btn.addEventListener('click', (ev)=>{
       ev.stopPropagation();
       const t = TASKS.find(x=>x.id===btn.dataset.id);
-      applyEstadoConFecha(t, btn.dataset.estado, renderAll);
+      applyEstadoConFecha(t, btn.dataset.estado, onChange);
     });
   });
   container.querySelectorAll('.qa-btn[data-open]').forEach(btn=>{
     btn.addEventListener('click', (ev)=>{ ev.stopPropagation(); openTaskModal(btn.dataset.id); });
   });
   container.querySelectorAll('.task-card').forEach(card=>{
-    card.addEventListener('click', ()=> openTaskModal(card.dataset.id));
+    card.addEventListener('click', (ev)=>{
+      if(ev.target.closest('.drag-handle') || ev.target.closest('.plan-remove')) return;
+      openTaskModal(card.dataset.id);
+    });
   });
 }
 
@@ -332,7 +336,7 @@ function renderMonthStrip(){
   const curMonth = new Date().getMonth()+1;
   strip.innerHTML = MONTHS.map((name,i)=>{
     const num = i+1;
-    const count = TASKS.filter(t=>t.mes_vencimiento===num && !isFullyDone(t)).length;
+    const count = TASKS.filter(t=>t.mes_vencimiento===num && !estaResuelta(t)).length;
     return `<div class="month-pill ${state.selectedMonth===num?'active':''} ${curMonth===num?'current':''}" data-month="${num}">
       <span class="m-name">${name.slice(0,3)}</span>
       <span class="m-count">${count}</span>
@@ -346,6 +350,9 @@ function renderMonthStrip(){
   });
 }
 function isFullyDone(t){ return distTotal(t,'Lista') === t.cantidad; }
+// "Sin resolver" = todavía queda alguna máquina en Pendiente. MND y Asociar son decisiones
+// ya tomadas (no son "pendientes de resolver"), aunque no estén en Lista.
+function estaResuelta(t){ return distTotal(t,'Pendiente') === 0; }
 
 function renderMeses(){
   const list = applyFilters(TASKS.filter(t=>t.mes_vencimiento===state.selectedMonth));
@@ -383,7 +390,7 @@ function currentPlanTasks(){
 function renderPlan(){
   document.getElementById('planDate').value = state.planDate;
   const dayTasks = currentPlanTasks();
-  const pend = dayTasks.filter(t=>!isFullyDone(t)).length;
+  const pend = dayTasks.filter(t=>!estaResuelta(t)).length;
   const hechas = dayTasks.length - pend;
   document.getElementById('planSummary').innerHTML = `
     <div class="plan-stat"><div class="n">${dayTasks.length}</div><div class="l">Paradas</div></div>
@@ -397,36 +404,20 @@ function renderPlan(){
   }
   container.innerHTML = dayTasks.map((t,idx)=>`
     <div class="plan-card" data-id="${t.id}">
-      <div class="drag-handle" data-id="${t.id}" title="Arrastrar para reordenar">
-        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+      <div class="plan-card-side">
+        <div class="drag-handle" data-id="${t.id}" title="Arrastrar para reordenar">
+          <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+        </div>
+        <div class="num">${idx+1}</div>
       </div>
-      <div class="num">${idx+1}</div>
-      <div class="plan-card-body">
-        <div class="cliente">${escapeHtml(t.cliente||'')}</div>
-        <div class="sub">${escapeHtml(t.localidad)} · ${fmtKm(t)}</div>
-        ${!isMixed(t) ? `<div class="plan-mini-actions">
-          ${ESTADOS.map(e=>`<button class="plan-mini-btn ${dominantEstado(t)===e?'active-'+e:''}" data-id="${t.id}" data-estado="${e}">${e}</button>`).join('')}
-        </div>` : `<div class="mix-badges" style="margin-top:7px;justify-content:flex-start;max-width:100%;">${ESTADOS.filter(e=>distTotal(t,e)>0).map(e=>`<span class="mix-chip state-${e}">${e} ×${distTotal(t,e)}</span>`).join('')}</div>`}
-      </div>
+      <div class="plan-card-inner">${taskCardHtml(t)}</div>
       <button class="plan-remove" data-id="${t.id}" title="Quitar del recorrido">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
   `).join('');
 
-  container.querySelectorAll('.plan-card').forEach(card=>{
-    card.addEventListener('click', (ev)=>{
-      if(ev.target.closest('.drag-handle') || ev.target.closest('.plan-remove') || ev.target.closest('.plan-mini-btn')) return;
-      openTaskModal(card.dataset.id);
-    });
-  });
-  container.querySelectorAll('.plan-mini-btn').forEach(btn=>{
-    btn.addEventListener('click', (ev)=>{
-      ev.stopPropagation();
-      const t = TASKS.find(x=>x.id===btn.dataset.id);
-      applyEstadoConFecha(t, btn.dataset.estado, ()=>{ renderPlan(); renderStateChips(); });
-    });
-  });
+  bindTaskCards(container, ()=>{ renderPlan(); renderStateChips(); });
   container.querySelectorAll('.plan-remove').forEach(btn=>{
     btn.addEventListener('click', (ev)=>{
       ev.stopPropagation();
@@ -852,7 +843,7 @@ function renderAll(){
   renderOverdueBanner();
   document.getElementById('filterDot').style.display = isFiltersActive() ? 'block' : 'none';
   document.getElementById('pageSub').textContent =
-    `${TASKS.filter(t=>!isFullyDone(t)).length} sin resolver de ${TASKS.length} en total`;
+    `${TASKS.filter(t=>!estaResuelta(t)).length} sin resolver de ${TASKS.length} en total`;
   if(state.view==='meses'){ renderMonthStrip(); renderMeses(); }
   else if(state.view==='todos'){ renderTodos(); }
   else if(state.view==='plan'){ renderPlan(); }
@@ -865,27 +856,98 @@ function exportarExcel(){
     return;
   }
   const filas = TASKS.map(t=>({
-    'Cliente': t.cliente||'', 'Localidad': t.localidad||'', 'Dirección': t.direccion||'',
+    'ID': t.id, 'Cliente': t.cliente||'', 'Localidad': t.localidad||'', 'Dirección': t.direccion||'',
     'Modelo': t.modelo||'', 'Cantidad equipos': t.cantidad,
-    'Tipo de abono': t.tipo_abono, 'Vence': MONTHS[t.mes_vencimiento-1]+' '+t.anio_vencimiento,
+    'Tipo de abono': t.tipo_abono,
+    'Mes vencimiento': t.mes_vencimiento, 'Año vencimiento': t.anio_vencimiento,
+    'Vence': MONTHS[t.mes_vencimiento-1]+' '+t.anio_vencimiento,
     'Último mantenimiento (Excel original)': t.ultimo_mantenimiento||'',
     'Pendiente': distTotal(t,'Pendiente'), 'Lista': distTotal(t,'Lista'),
     'MND': distTotal(t,'MND'), 'Asociar': distTotal(t,'Asociar'),
     'Distancia (km)': t.distancia_km ?? '', 'Observaciones': t.nota||'',
+    'Fecha planificada': t.fecha_planificada||'', 'Orden plan': t.orden_plan||0,
     'Último registro': (t.registro && t.registro[0]) ? `${fmtDate(t.registro[0].fecha)} - ${t.registro[0].detalle}` : ''
   }));
   const registroRows = [];
   TASKS.forEach(t=>{
     (t.registro||[]).forEach(r=>{
-      registroRows.push({'Cliente': t.cliente||'', 'Localidad': t.localidad||'', 'Fecha': r.fecha, 'Detalle': r.detalle});
+      registroRows.push({'ID': t.id, 'Cliente': t.cliente||'', 'Localidad': t.localidad||'', 'Fecha': r.fecha, 'Detalle': r.detalle});
     });
   });
   const wb = XLSX.utils.book_new();
   const wsMain = XLSX.utils.json_to_sheet(filas);
   XLSX.utils.book_append_sheet(wb, wsMain, 'Mantenimientos');
-  const wsReg = XLSX.utils.json_to_sheet(registroRows.length? registroRows : [{'Cliente':'','Localidad':'','Fecha':'','Detalle':''}]);
+  const wsReg = XLSX.utils.json_to_sheet(registroRows.length? registroRows : [{'ID':'','Cliente':'','Localidad':'','Fecha':'','Detalle':''}]);
   XLSX.utils.book_append_sheet(wb, wsReg, 'Registro de fechas');
   XLSX.writeFile(wb, `mantenimientos_${todayStr()}.xlsx`);
+}
+
+// ================= Importar datos =================
+async function importarExcel(file){
+  if(typeof XLSX === 'undefined'){
+    alert('No se pudo cargar la librería de Excel. Revisá que el celular tenga conexión a internet e intentá de nuevo.');
+    return;
+  }
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const wsMain = wb.Sheets['Mantenimientos'];
+    if(!wsMain){
+      alert('Ese archivo no tiene la hoja "Mantenimientos". ¿Es un archivo exportado desde esta app?');
+      return;
+    }
+    const rows = XLSX.utils.sheet_to_json(wsMain, {defval:''});
+    const wsReg = wb.Sheets['Registro de fechas'];
+    const regRows = wsReg ? XLSX.utils.sheet_to_json(wsReg, {defval:''}) : [];
+    const regById = {};
+    regRows.forEach(r=>{
+      const id = String(r['ID']||'').trim();
+      if(!id || !r['Fecha']) return;
+      if(!regById[id]) regById[id] = [];
+      regById[id].push({fecha: String(r['Fecha']), detalle: String(r['Detalle']||'')});
+    });
+
+    let actualizadas = 0, nuevas = 0;
+    rows.forEach(r=>{
+      const id = String(r['ID']||'').trim();
+      if(!id) return;
+      const campos = {
+        cliente: String(r['Cliente']||''), localidad: String(r['Localidad']||''),
+        direccion: String(r['Dirección']||''), modelo: String(r['Modelo']||''),
+        cantidad: parseInt(r['Cantidad equipos'],10) || 1,
+        tipo_abono: String(r['Tipo de abono']||'Mensual'),
+        mes_vencimiento: parseInt(r['Mes vencimiento'],10) || 9,
+        anio_vencimiento: parseInt(r['Año vencimiento'],10) || new Date().getFullYear(),
+        ultimo_mantenimiento: r['Último mantenimiento (Excel original)'] || null,
+        distribucion: {
+          Pendiente: parseInt(r['Pendiente'],10)||0, Lista: parseInt(r['Lista'],10)||0,
+          MND: parseInt(r['MND'],10)||0, Asociar: parseInt(r['Asociar'],10)||0
+        },
+        distancia_km: r['Distancia (km)']===''? null : parseFloat(r['Distancia (km)']),
+        nota: String(r['Observaciones']||''),
+        fecha_planificada: r['Fecha planificada'] || null,
+        orden_plan: parseInt(r['Orden plan'],10) || 0,
+        registro: regById[id] || []
+      };
+      let t = TASKS.find(x=>x.id===id);
+      if(t){
+        Object.assign(t, campos);
+        actualizadas++;
+      } else {
+        TASKS.push(Object.assign({id, historial:[]}, campos));
+        nuevas++;
+      }
+    });
+
+    saveTasks(TASKS);
+    syncDistancias();
+    processRenewals();
+    renderAll();
+    alert(`Importación lista: ${actualizadas} tarea(s) actualizada(s), ${nuevas} nueva(s).`);
+  }catch(e){
+    console.error(e);
+    alert('No se pudo leer ese archivo. Asegurate de elegir un .xlsx exportado desde esta misma app.');
+  }
 }
 
 // ================= Bind general =================
@@ -904,6 +966,12 @@ document.getElementById('planPickerClose').addEventListener('click', ()=>{ close
 document.getElementById('overlay').addEventListener('click', closeAllSheets);
 document.getElementById('btnSettings').addEventListener('click', openDistSheet);
 document.getElementById('btnExport').addEventListener('click', exportarExcel);
+document.getElementById('btnImport').addEventListener('click', ()=> document.getElementById('importFileInput').click());
+document.getElementById('importFileInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(file) importarExcel(file);
+});
 document.getElementById('dateSheetCancel').addEventListener('click', ()=>closeSheet('dateSheet'));
 document.getElementById('fabAdd').addEventListener('click', ()=>{ if(state.view==='plan') openPlanPicker(); else openAddSheet(); });
 
@@ -963,4 +1031,20 @@ boot();
       navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(()=>{});
     }catch(e){}
   }
+})();
+
+// ================= Botón "atrás" de Android: no salir de la app =================
+(function trapBackButton(){
+  history.pushState({app:true}, '', location.href);
+  window.addEventListener('popstate', ()=>{
+    const openSheetEl = document.querySelector('.sheet.show');
+    if(openSheetEl){
+      closeAllSheets();
+    } else if(state.view !== 'meses'){
+      switchView('meses');
+    }
+    // Si ya estamos en la pestaña principal sin nada abierto, no hacemos nada más:
+    // el push de abajo evita que el navegador/Android cierre la app.
+    history.pushState({app:true}, '', location.href);
+  });
 })();

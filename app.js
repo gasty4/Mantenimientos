@@ -1022,14 +1022,13 @@ boot();
     const blob = new Blob([JSON.stringify(manifest)], {type:'application/manifest+json'});
     document.getElementById('manifestLink').href = URL.createObjectURL(blob);
   }catch(e){}
+  // Limpieza: versiones anteriores registraban un service worker desde un blob que se
+  // regeneraba en cada carga. Eso podía quedar "pegado" y servir una versión vieja de la
+  // app después de actualizar. Lo desregistramos si quedó alguno dando vueltas.
   if('serviceWorker' in navigator){
-    try{
-      const swCode = `self.addEventListener('install', e => self.skipWaiting());
-        self.addEventListener('activate', e => self.clients.claim());
-        self.addEventListener('fetch', e => {});`;
-      const swBlob = new Blob([swCode], {type:'application/javascript'});
-      navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(()=>{});
-    }catch(e){}
+    navigator.serviceWorker.getRegistrations().then(regs=>{
+      regs.forEach(reg=> reg.unregister());
+    }).catch(()=>{});
   }
 })();
 

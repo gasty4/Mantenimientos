@@ -37,7 +37,7 @@
   --radius-sm:9px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{height:100%;}
+html,body{height:100%;overflow:hidden;}
 body{
   margin:0;
   background:var(--bg);
@@ -56,6 +56,7 @@ button{font-family:inherit;}
   max-width:640px;
   margin:0 auto;
   position:relative;
+  overflow:hidden;
   border-left:1px solid var(--border-soft);
   border-right:1px solid var(--border-soft);
 }
@@ -125,7 +126,7 @@ button{font-family:inherit;}
 .month-pill.current::after{content:'';display:block;width:4px;height:4px;border-radius:50%;background:var(--amber);margin:4px auto 0;}
 
 /* ---------- Main / views ---------- */
-main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:14px;}
+main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:14px;}
 .view{display:none;}
 .view.active{display:block;}
 .section-label{
